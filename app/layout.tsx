@@ -1,15 +1,13 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { withBase } from '@/lib/paths';
 
 export const metadata: Metadata = {
   title: "Controle de Coberturas",
   description: "Preenchimento de coberturas pelos supervisores e prestação de contas em Excel.",
-  other: {
-    "codex-preview": "development",
-  },
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: withBase('/favicon.svg'),
+    shortcut: withBase('/favicon.svg'),
   },
 };
 

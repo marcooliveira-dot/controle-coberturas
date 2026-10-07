@@ -1,0 +1,6 @@
+import { z } from 'zod';
+import { createSession,verifyPassword } from '@/lib/auth';
+import { rawDatabase } from '@/lib/database';
+import { sameOrigin,rateLimit,HttpError,errorResponse,json } from '@/lib/server';
+export const runtime='nodejs';
+export async function POST(r:Request){try{sameOrigin(r);rateLimit(r,'login');const p=z.object({email:z.string().email().max(254).transform(s=>s.toLowerCase().trim()),password:z.string().min(1).max(200)}).strict().safeParse(await r.json());if(!p.success)throw new HttpError(400,'Informe e-mail e senha.');const db=rawDatabase();const m=db.prepare('SELECT * FROM members WHERE email=? AND disabled=0').get(p.data.email) as any;const locked=m&&m.locked_until>Date.now();const valid=await verifyPassword(p.data.password,m?.password_hash||'scrypt:00000000000000000000000000000000:'+('0'.repeat(128)));if(!m||!valid||locked){if(m&&!locked){const attempts=(m.failed_attempts||0)+1;db.prepare('UPDATE members SET failed_attempts=?,locked_until=? WHERE email=?').run(attempts,attempts>=5?Date.now()+900000:0,m.email);}throw new HttpError(401,'E-mail ou senha inválidos. Após várias tentativas, aguarde 15 minutos.');}db.prepare('UPDATE members SET failed_attempts=0,locked_until=0 WHERE email=?').run(m.email);await createSession(m.user_id);return json({ok:true})}catch(e){return errorResponse(e)}}

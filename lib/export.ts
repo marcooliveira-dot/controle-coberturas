@@ -1,5 +1,6 @@
 import type { Coverage } from './coverage';
 import { dateLabel } from './coverage';
+import { withBase } from './paths';
 export async function buildExcel(records:Coverage[],template:ArrayBuffer){
  const {default:ExcelJS}=await import('exceljs');
  const wb=new ExcelJS.Workbook();await wb.xlsx.load(template);const base=wb.worksheets[0];const model=structuredClone(base.model);wb.removeWorksheet(base.id);
@@ -11,4 +12,4 @@ export async function buildExcel(records:Coverage[],template:ArrayBuffer){
  }
  wb.creator='Controle de Coberturas';wb.created=new Date();wb.calcProperties.fullCalcOnLoad=true;return wb.xlsx.writeBuffer();
 }
-export async function downloadExcel(records:Coverage[]){if(!records.length)throw new Error('Não há registros para exportar.');const res=await fetch('/modelo.xlsx');if(!res.ok)throw new Error('Não foi possível carregar o modelo Excel.');const buffer=await buildExcel(records,await res.arrayBuffer());const blob=new Blob([buffer as BlobPart],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`coberturas-${new Date().toISOString().slice(0,10)}.xlsx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+export async function downloadExcel(records:Coverage[]){if(!records.length)throw new Error('Não há registros para exportar.');const res=await fetch(withBase('/modelo.xlsx'));if(!res.ok)throw new Error('Não foi possível carregar o modelo Excel.');const buffer=await buildExcel(records,await res.arrayBuffer());const blob=new Blob([buffer as BlobPart],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`coberturas-${new Date().toISOString().slice(0,10)}.xlsx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}

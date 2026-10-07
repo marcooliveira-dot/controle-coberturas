@@ -1,4 +1,6 @@
 import Workspace from './workspace';
-import { getChatGPTUser } from './chatgpt-auth';
+import { getUser } from '@/lib/auth';
+import { redirect } from 'next/navigation';
+import { withBase } from '@/lib/paths';
 export const dynamic = 'force-dynamic';
-export default async function Home(){ const user=await getChatGPTUser(); return <Workspace signedIn={!!user} email={user?.email ?? ''}/>; }
+export default async function Home(){const user=await getUser();if(!user)redirect(withBase('/login'));return <Workspace signedIn email={user.email}/>;}

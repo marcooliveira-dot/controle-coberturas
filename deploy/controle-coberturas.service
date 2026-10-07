@@ -1,0 +1,31 @@
+[Unit]
+Description=Controle de Coberturas
+After=network.target
+
+[Service]
+Type=simple
+User=coberturas
+Group=coberturas
+WorkingDirectory=/opt/controle-coberturas/current
+EnvironmentFile=/etc/controle-coberturas.env
+Environment=NODE_ENV=production
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=3100
+Environment=NEXT_TELEMETRY_DISABLED=1
+Environment=NODE_OPTIONS=--max-old-space-size=192
+ExecStartPre=/usr/bin/node scripts/migrate.mjs
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/controle-coberturas
+MemoryHigh=240M
+MemoryMax=384M
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
