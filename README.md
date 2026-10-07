@@ -10,7 +10,7 @@ Sistema para supervisores registrarem coberturas e para o administrativo consult
 - Remoção de acesso revoga sessões imediatamente e preserva os registros anteriores. Recadastrar o mesmo e-mail recupera a propriedade dos registros.
 - Validação de CPF, datas e valores, com total calculado no servidor.
 - Exportação `.xlsx` no layout original de 19 colunas, separada por supervisor e mês, preservando CPFs como texto.
-- Banco SQLite persistente fora da pasta das releases e backup diário consistente no próprio servidor, com retenção de 30 dias.
+- Banco SQLite persistente fora da pasta das releases. Nesta instalação de teste, o backup automático fica desativado.
 
 ## Hospedagem
 
@@ -44,7 +44,7 @@ Os testes usam um banco temporário e contas fictícias. Cobrem token inicial, c
 
 O arquivo de ambiente deve conter origem HTTPS, caminho persistente do banco, token inicial e e-mail do responsável. Ele fica fora do repositório, com permissão `0600`. Os modelos em `deploy/` configuram um usuário de serviço sem login, acesso restrito ao banco e limites de memória.
 
-O instalador `deploy/install.sh` recebe o SHA de origem, o caminho do pacote e o caminho do ambiente privado. Ele foi preparado para a configuração Nginx existente deste servidor (`backupemail.conf`); revise esse caminho em outras instalações. O instalador salva uma cópia do virtual host, acrescenta somente a rota `/coberturas`, verifica a configuração e recarrega o Nginx depois de confirmar a saúde da aplicação. O serviço e o backup são habilitados para iniciar automaticamente.
+O instalador `deploy/install.sh` recebe o SHA de origem, o caminho do pacote e o caminho do ambiente privado. Ele foi preparado para a configuração Nginx existente deste servidor (`backupemail.conf`); revise esse caminho em outras instalações. O instalador salva uma cópia do virtual host, acrescenta somente a rota `/coberturas`, verifica a configuração e recarrega o Nginx depois de confirmar a saúde da aplicação. O serviço é habilitado para iniciar automaticamente; o backup automático fica desativado por padrão, conforme a opção para teste. Para habilitar backups futuramente, execute o instalador com `ENABLE_BACKUPS=true`.
 
 Dados: `/var/lib/controle-coberturas/coberturas.sqlite`. Backups: `/var/backups/controle-coberturas`. Código: `/opt/controle-coberturas/releases/<SHA>`; `current` aponta para a release ativa. Backups no mesmo servidor não substituem cópias externas para recuperação em caso de perda da máquina.
 

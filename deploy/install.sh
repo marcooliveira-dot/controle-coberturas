@@ -3,6 +3,7 @@ set -euo pipefail
 release_id=${1:?Informe o SHA do commit}
 archive_path=${2:?Informe o arquivo da release}
 environment_source=${3:?Informe o arquivo de ambiente privado}
+backup_enabled=${ENABLE_BACKUPS:-false}
 [[ "$release_id" =~ ^[a-f0-9]{40}$ ]] || { echo 'SHA inválido'; exit 1; }
 [[ "$EUID" == 0 ]] || { echo 'Execute como root'; exit 1; }
 command -v node >/dev/null
@@ -12,7 +13,7 @@ install -d -m 0755 /opt/controle-coberturas/releases
 install -d -o coberturas -g coberturas -m 0700 /var/lib/controle-coberturas /var/backups/controle-coberturas
 install -d -m 0700 /var/backups/controle-coberturas-config
 if [[ ! -f /etc/controle-coberturas.env ]]; then install -m 0600 "$environment_source" /etc/controle-coberturas.env; fi
-if [[ -f /var/lib/controle-coberturas/coberturas.sqlite && -L /opt/controle-coberturas/current ]]; then systemctl start controle-coberturas-backup.service; fi
+if [[ "$backup_enabled" == true && -f /var/lib/controle-coberturas/coberturas.sqlite && -L /opt/controle-coberturas/current ]]; then systemctl start controle-coberturas-backup.service; fi
 release_dir="/opt/controle-coberturas/releases/$release_id"
 install -d -m 0755 "$release_dir"
 tar -xzf "$archive_path" -C "$release_dir"
@@ -25,7 +26,7 @@ install -m 0644 "$release_dir/deploy/controle-coberturas.service" /etc/systemd/s
 install -m 0644 "$release_dir/deploy/controle-coberturas-backup.service" /etc/systemd/system/
 install -m 0644 "$release_dir/deploy/controle-coberturas-backup.timer" /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable controle-coberturas.service controle-coberturas-backup.timer
+systemctl enable controle-coberturas.service
 systemctl restart controle-coberturas.service
 for i in $(seq 1 30); do if curl -fsS http://127.0.0.1:3100/coberturas/api/health >/dev/null; then break; fi; sleep 1; done
 curl -fsS http://127.0.0.1:3100/coberturas/api/health
@@ -44,6 +45,11 @@ if 'snippets/controle-coberturas-proxy.conf' not in s:
 PY
 if ! nginx -t; then cp -a "$nginx_backup" "$nginx_site"; exit 1; fi
 systemctl reload nginx
-systemctl start controle-coberturas-backup.timer
-systemctl start controle-coberturas-backup.service
+if [[ "$backup_enabled" == true ]]; then
+    systemctl enable --now controle-coberturas-backup.timer
+    systemctl start controle-coberturas-backup.service
+else
+    systemctl disable --now controle-coberturas-backup.timer
+    systemctl stop controle-coberturas-backup.service
+fi
 echo 'Instalação concluída.'
