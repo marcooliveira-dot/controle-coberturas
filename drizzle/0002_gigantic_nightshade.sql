@@ -1,0 +1,1 @@
+ALTER TABLE `coverages` ADD `service_type` text DEFAULT 'cobertura' NOT NULL;

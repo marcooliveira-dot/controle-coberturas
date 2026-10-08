@@ -15,6 +15,13 @@
       "when": 1791403317946,
       "tag": "0001_big_puma",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791462041286,
+      "tag": "0002_gigantic_nightshade",
+      "breakpoints": true
     }
   ]
 }
