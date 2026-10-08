@@ -1,0 +1,5 @@
+import { z } from 'zod';
+import { admin,sameOrigin,errorResponse,json,HttpError } from '@/lib/server';
+import { rawDatabase } from '@/lib/database';
+export async function GET(){try{await admin();const row=rawDatabase().prepare('SELECT monthly_limit_cents FROM dashboard_settings WHERE id=1').get() as any;return json({monthlyLimitCents:row?.monthly_limit_cents||500000})}catch(e){return errorResponse(e)}}
+export async function PUT(r:Request){try{sameOrigin(r);const user=await admin();const p=z.object({monthlyLimitCents:z.number().int().min(100000).max(500000)}).strict().safeParse(await r.json());if(!p.success)throw new HttpError(400,'Informe um limite entre R$ 1.000 e R$ 5.000.');rawDatabase().prepare('INSERT INTO dashboard_settings(id,monthly_limit_cents,updated_by,updated_at) VALUES (1,?,?,?) ON CONFLICT(id) DO UPDATE SET monthly_limit_cents=excluded.monthly_limit_cents,updated_by=excluded.updated_by,updated_at=excluded.updated_at').run(p.data.monthlyLimitCents,user.email,new Date().toISOString());return json(p.data)}catch(e){return errorResponse(e)}}
