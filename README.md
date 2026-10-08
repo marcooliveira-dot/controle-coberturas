@@ -57,3 +57,11 @@ Quando o DNS estiver disponível, crie um registro A chamado `controle.cobertura
 Senhas são armazenadas como hashes scrypt; tokens de sessão e convite são armazenados somente como hashes. Cookies são HttpOnly, Secure e SameSite Strict em produção. Mutações verificam a origem; tentativas de autenticação têm limites e bloqueio temporário.
 
 O repositório público contém somente código e o modelo Excel vazio. Nunca envie chaves SSH, arquivos `.env`, senhas, tokens, bancos ou registros de prestadores ao GitHub. As migrações já aplicadas não devem ser reescritas: acrescente uma nova migração e faça backup antes de aplicá-la. A versão anterior hospedada no Sites foi preservada; a instalação própria usa autenticação e banco independentes.
+
+## Interface no Netlify
+
+A interface pode ser publicada no Netlify com `npm run build:netlify`, usando a pasta `dist/netlify`. O arquivo `netlify.toml` define as rotas da aplicação e encaminha `/api/*` para a API HTTPS do servidor existente. O banco SQLite, as senhas e os tokens permanecem no servidor; nenhuma credencial de banco ou chave SSH é colocada no frontend.
+
+No servidor, configure `APP_ORIGIN` com a origem HTTPS do Netlify, `PUBLIC_APP_BASE_PATH` vazio para gerar convites na raiz da interface, e `ALLOWED_ORIGINS` com as origens exatas adicionais que devem continuar funcionando. Não use curingas. Usuários entram no Netlify com o mesmo e-mail e senha do sistema.
+
+O servidor da API deve permanecer ligado para o login, os registros e o dashboard funcionarem. O Netlify hospeda os arquivos da interface, não o banco SQLite.

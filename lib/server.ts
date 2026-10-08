@@ -2,7 +2,7 @@ import { getUser } from './auth';
 import { database } from './database';
 export { database };
 export class HttpError extends Error{constructor(public status:number,message:string){super(message)}}
-export function sameOrigin(r:Request){const origin=r.headers.get('origin');const expected=process.env.APP_ORIGIN||new URL(r.url).origin;if(origin&&origin!==expected)throw new HttpError(403,'Origem não autorizada');}
+export function sameOrigin(r:Request){const origin=r.headers.get('origin');const expected=process.env.APP_ORIGIN||new URL(r.url).origin;const allowed=[expected,...(process.env.ALLOWED_ORIGINS||'').split(',').map(v=>v.trim()).filter(Boolean)].map(v=>new URL(v).origin);if(origin&&!allowed.includes(origin))throw new HttpError(403,'Origem não autorizada');}
 export async function currentMember(){const u=await getUser();if(!u)throw new HttpError(401,'Entre com sua conta para continuar.');return {...u,name:u.displayName,primary_admin:u.primary?1:0};}
 export async function admin(){const m=await currentMember();if(m.role!=='admin')throw new HttpError(403,'Acesso exclusivo do administrativo.');return m;}
 export function errorResponse(e:unknown){if(e instanceof HttpError)return Response.json({error:e.message},{status:e.status,headers:{'Cache-Control':'no-store'}});console.error('Coverage request failed',e);return Response.json({error:'Não foi possível concluir. Seus dados no formulário foram mantidos; tente novamente.'},{status:503,headers:{'Cache-Control':'no-store'}});}
