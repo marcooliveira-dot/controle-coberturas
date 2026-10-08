@@ -18,11 +18,12 @@ test('Self-hosted authentication, authorization, persistence and exports',async 
  const request=async(path,{cookie='',method='GET',body,headers={}}={})=>{const r=await fetch(origin+base+path,{method,redirect:'manual',headers:{Origin:origin,'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{}),...headers},body:body===undefined?undefined:JSON.stringify(body)});const text=await r.text();let data;try{data=JSON.parse(text)}catch{data={text}}return {status:r.status,data,cookie:r.headers.get('set-cookie')?.split(';')[0],setCookie:r.headers.get('set-cookie'),location:r.headers.get('location')}};
  try{
  let ready=false;for(let i=0;i<100;i++){try{const r=await request('/api/health');if(r.status===200){ready=true;break}}catch{}if(server.exitCode!==null)break;await delay(100)}assert.ok(ready,logs);
+ const anonymousHome=await request('');assert.equal(anonymousHome.status,307);assert.equal(anonymousHome.location,base+'/login');
  const adminBody={token:setupToken,name:'Responsável QA',email:'admin@example.invalid',password:'Senha de teste 123!'};
  let adminCookie,superCookie,otherCookie;
  await t.test('Bootstrap token, secure session, anonymous and forged-header rejection',async()=>{
   const invalid=await request('/api/auth/setup',{method:'POST',body:{...adminBody,token:'0'.repeat(64)}});assert.equal(invalid.status,403);
-  const initialized=await request('/api/auth/setup',{method:'POST',body:adminBody});assert.equal(initialized.status,200);adminCookie=initialized.cookie;assert.match(initialized.setCookie,/HttpOnly/);assert.match(initialized.setCookie,/Secure/);assert.match(initialized.setCookie,/SameSite=strict/i);assert.match(adminCookie,/__Host-coberturas_session/);
+  const initialized=await request('/api/auth/setup',{method:'POST',body:adminBody});assert.equal(initialized.status,200);adminCookie=initialized.cookie;const signedInLogin=await request('/login',{cookie:adminCookie});assert.equal(signedInLogin.status,307);assert.equal(signedInLogin.location,base+'/');const configuredSetup=await request('/setup');assert.equal(configuredSetup.status,307);assert.equal(configuredSetup.location,base+'/login');assert.match(initialized.setCookie,/HttpOnly/);assert.match(initialized.setCookie,/Secure/);assert.match(initialized.setCookie,/SameSite=strict/i);assert.match(adminCookie,/__Host-coberturas_session/);
   assert.equal((await request('/api/auth/setup',{method:'POST',body:adminBody})).status,409);
   assert.equal((await request('/api/coverages')).status,401);
   assert.equal((await request('/api/session',{headers:{'oai-authenticated-user-id':'fake','oai-authenticated-user-email':'admin@example.invalid'}})).status,401);
