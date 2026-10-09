@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useMemo } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { ClipboardList, Download, ShieldCheck, Save, Plus, Users, RefreshCw } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -13,13 +13,14 @@ import { coverageSchema, serviceLabel, dayLabels, datesByWeekday, money, dateLab
 import AdminDashboard from './admin-dashboard';
 import { LayoutDashboard } from 'lucide-react';
 import { withBase } from '@/lib/paths';
+import MonthPicker from '@/components/month-picker';
 type Member={email:string,name:string,role:'admin'|'supervisor',primary?:boolean,primary_admin?:number};
 type FormValues={name:string,cpf:string,operation:string,start:string,end:string,month:string,justification:string,details:string,pix:string,thirdParty:string,daily:string,days:string};
 const defaults:FormValues={name:'',cpf:'',operation:'',start:'',end:'',month:'',justification:'',details:'',pix:'',thirdParty:'',daily:'',days:''};
 async function api(path:string,options:RequestInit={}){const r=await fetch(withBase(path),{...options,cache:'no-store',headers:{'Content-Type':'application/json',...options.headers}});const data:any=await r.json();if(r.status===401)window.location.assign(withBase('/login'));if(!r.ok)throw new Error(data.error||'Não foi possível concluir. Tente novamente.');return data;}
 export default function Workspace({signedIn,email,initialMember,initialMonth}:{signedIn:boolean,email:string,initialMember:Member,initialMonth:string}) {
  const [member,setMember]=useState<Member|null>(initialMember),[inviteUrl,setInviteUrl]=useState(''),[loading,setLoading]=useState(signedIn),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[isError,setIsError]=useState(false),[tab,setTab]=useState(initialMember.role==='admin'?'dashboard':'new'),[serviceType,setServiceType]=useState<'cobertura'|'apoio_operacional'>('cobertura'),[records,setRecords]=useState<Coverage[]>([]),[month,setMonth]=useState(initialMember.role==='admin'?initialMonth:''),[search,setSearch]=useState(''),[supervisor,setSupervisor]=useState('all'),[supervisors,setSupervisors]=useState<{id:string,name:string,email:string}[]>([]),[weekdays,setWeekdays]=useState<number[]>([]),[detail,setDetail]=useState<Coverage|null>(null),[users,setUsers]=useState<Member[]>([]),[role,setRole]=useState('supervisor'),[remove,setRemove]=useState<Member|null>(initialMember),[exporting,setExporting]=useState(false);
- const {register,handleSubmit,watch,reset,formState:{errors}}=useForm<FormValues>({defaultValues:defaults});
+ const {register,handleSubmit,watch,reset,control,formState:{errors}}=useForm<FormValues>({defaultValues:defaults});
  const daily=watch('daily'),days=watch('days');const start=watch('start'),end=watch('end');const weekdayDates=useMemo(()=>datesByWeekday(start,end),[start,end]);const total=Math.round(Number(daily)*100)*Number(days)||0;
  const supportWarning=useMemo(()=>serviceType==='apoio_operacional'&&end&&isPastWeekForSupport(end),[serviceType,end]);
  useEffect(()=>{if(start&&end&&end>=start)setWeekdays(previous=>previous.filter(i=>weekdayDates[i].length>0));},[start,end,weekdayDates]);
@@ -41,7 +42,10 @@ export default function Workspace({signedIn,email,initialMember,initialMonth}:{s
  const table=useReactTable({data:supervisorRecords,columns,state:{globalFilter:search},onGlobalFilterChange:setSearch,getCoreRowModel:getCoreRowModel(),getFilteredRowModel:getFilteredRowModel()});
  const filtered=table.getFilteredRowModel().rows.map(r=>r.original);
  async function exportFile(){setExporting(true);try{const {downloadExcel}=await import('@/lib/export');await downloadExcel(filtered);notify('Excel gerado no layout do modelo, com uma aba por tipo de serviço, supervisor e mês.')}catch(e){notify((e as Error).message,true)}finally{setExporting(false)}}
- function input(name:keyof FormValues,label:string,options:{type?:string,required?:boolean,placeholder?:string,wide?:boolean,maxLength?:number}={}){return <label className={options.wide?'wide':''}>{label}{options.required?' *':''}<input type={options.type||'text'} placeholder={options.placeholder} maxLength={options.maxLength||250} step={name==='daily'?'0.01':undefined} min={name==='daily'?'0.01':name==='days'?'1':undefined} {...register(name,{required:options.required?'Campo obrigatório':false})}/>{errors[name]&&<span className="field-error">{errors[name]?.message}</span>}</label>}
+ function input(name:keyof FormValues,label:string,options:{type?:string,required?:boolean,placeholder?:string,wide?:boolean,maxLength?:number}={}){
+  if(name==='month')return <div className={options.wide?'wide':''}><span className="block text-sm font-semibold mb-2">{label}{options.required?' *':''}</span><Controller name="month" control={control} rules={{required:options.required?'Selecione o mês e o ano':false}} render={({field})=><MonthPicker label={label} value={field.value} onChange={field.onChange} onBlur={field.onBlur} required={options.required}/>} />{errors.month&&<span className="field-error">{errors.month.message}</span>}</div>;
+  return <label className={options.wide?'wide':''}>{label}{options.required?' *':''}<input type={options.type||'text'} placeholder={options.placeholder} maxLength={options.maxLength||250} step={name==='daily'?'0.01':undefined} min={name==='daily'?'0.01':name==='days'?'1':undefined} {...register(name,{required:options.required?'Campo obrigatório':false})}/>{errors[name]&&<span className="field-error">{errors[name]?.message}</span>}</label>
+ }
  return <><header><div className="brand"><span className="mark"><ClipboardList size={24}/></span><span>Controle de Coberturas<small>LOJAS FA · PRESTAÇÃO DE CONTAS</small></span></div><span className="account">{member?.name||email||'Acesso da equipe'}{signedIn&&<button className="secondary ml-3" onClick={logout}>Sair</button>}</span></header><main>
  <div className="page-heading"><div><p className="eyebrow">{member?.role==='admin'?'ÁREA DO ADMINISTRATIVO':'ÁREA DO SUPERVISOR'}</p><h1>{tab==='dashboard'?'Dashboard das lojas':tab==='new'?(serviceType==='apoio_operacional'?'Novo apoio operacional':'Nova cobertura'):tab==='team'?'Acessos da equipe':'Registros de serviços'}</h1><p>{tab==='dashboard'?'Acompanhe chamados, valores e limites por supervisor.':tab==='new'?'Preencha os dados do prestador e do período trabalhado.':tab==='team'?'Cadastre o e-mail e o perfil de cada pessoa.':member?.role==='admin'?'Consulte os serviços e baixe a prestação de contas.':'Acompanhe os serviços que você preencheu.'}</p></div><span className="secure"><ShieldCheck size={18}/> Acesso individual</span></div>
  {message&&<div role={isError?'alert':'status'} className={'message'+(isError?' error':'')}>{message}</div>}
