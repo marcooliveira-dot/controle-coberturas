@@ -6,7 +6,7 @@ const scrypt=promisify(scryptCallback);
 const secure=process.env.COOKIE_SECURE!=='false';
 export const sessionCookie=secure?'__Host-coberturas_session':'coberturas_session';
 export const tokenHash=(token:string)=>createHash('sha256').update(token).digest('hex');
-export type User={userId:string,email:string,displayName:string,role:'admin'|'supervisor',primary:boolean};
+export type User={userId:string,email:string,displayName:string,role:'admin'|'supervisor'|'ceo',primary:boolean};
 export async function hashPassword(password:string){const salt=randomBytes(16).toString('hex');const hash=await scrypt(password,salt,64) as Buffer;return 'scrypt:'+salt+':'+hash.toString('hex')}
 export async function verifyPassword(password:string,encoded:string){try{const [algo,salt,value]=encoded.split(':');if(algo!=='scrypt'||!salt||!value)return false;const expected=Buffer.from(value,'hex');const actual=await scrypt(password,salt,64) as Buffer;return expected.length===actual.length&&timingSafeEqual(expected,actual)}catch{return false}}
 export async function getUser():Promise<User|null>{const token=(await cookies()).get(sessionCookie)?.value;if(!token||!/^[a-f0-9]{64}$/.test(token))return null;const row=await rawDatabase().prepare('SELECT m.* FROM sessions s JOIN members m ON m.user_id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND m.disabled=0').get(tokenHash(token),Date.now()) as any;if(!row)return null;return {userId:row.user_id,email:row.email,displayName:row.name,role:row.role,primary:!!row.primary_admin}}

@@ -4,6 +4,7 @@ import { HttpError } from './server';
 import { deadlineFlags, type FinanceInfo } from './finance';
 
 export async function authorizedCoverage(id:string,member:{role:string,userId:string}){
+  if(member.role==='ceo')throw new HttpError(404,'Registro não encontrado.');
   const row=await rawDatabase().prepare('SELECT * FROM coverages WHERE id=?').get(id) as any;
   if(!row||(member.role!=='admin'&&row.owner_id!==member.userId))throw new HttpError(404,'Registro não encontrado.');
   return row;

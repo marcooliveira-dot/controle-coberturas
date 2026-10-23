@@ -3,7 +3,7 @@ import { coverageSchema } from '@/lib/coverage';
 import { describeFinance } from '@/lib/finance-server';
 export async function GET(r:Request){
   try{
-    const m=await currentMember(),month=new URL(r.url).searchParams.get('month');
+    const m=await currentMember();if(m.role==='ceo')throw new HttpError(403,'Consulte os dados na visão executiva.');const month=new URL(r.url).searchParams.get('month');
     if(month&&!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))throw new HttpError(400,'Mês inválido');
     const conditions:string[]=[],args:string[]=[];
     if(m.role!=='admin'){conditions.push('c.owner_id = ?');args.push(m.userId)}

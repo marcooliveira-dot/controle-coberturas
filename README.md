@@ -97,3 +97,11 @@ A aba **Comprovantes** lista os anexos do financeiro agrupados pelo CPF do colab
 O administrativo pode enviar PDF, JPG ou PNG individual (até 5 MB), identificar pelo nome completo/CPF e confirmar o registro, período e valor antes da publicação. Homônimos, múltiplos registros e comprovantes ilegíveis exigem seleção manual. O nome do arquivo também pode gerar uma sugestão, identificada como tal. O envio do comprovante não dá baixa automática no pagamento.
 
 A identificação funciona no próprio servidor, sem enviar documentos a serviços externos: instale `poppler-utils`, `tesseract-ocr` e `tesseract-ocr-por`. A leitura de PDF considera até cinco páginas de texto e, quando necessário, OCR da primeira página; imagens usam OCR em português. Se a leitura não funcionar, o financeiro pode selecionar o colaborador manualmente. Os arquivos temporários de leitura são removidos ao fim do processamento. Os anexos definitivos permanecem privados no PostgreSQL/SQLite existente e nos mesmos endpoints autenticados do financeiro.
+
+### Perfil CEO e visão 3D do Frango Assado
+
+Em **Acessos**, o administrativo pode cadastrar o perfil **CEO**, que abre diretamente a visão executiva somente para consulta. O administrativo também tem a aba **Visão CEO · 3D** para visualizar o mesmo painel. O perfil CEO não preenche chamados, não aprova/paga registros, não gerencia acessos e não recebe CPF, chave PIX ou dados bancários na resposta do painel.
+
+A maquete usa Three.js com carregamento sob demanda, 14 bases FA da tabela atual e unidades adicionais identificadas nos registros como `FA ...` ou `Frango Assado ...`. Os personagens e a disposição são ilustrativos. Não representam escala, presença ao vivo ou localização geográfica. O usuário pode girar, aproximar, pausar as animações ou escolher uma base pela lista acessível. Se WebGL não estiver disponível, os dados e a seleção pela lista continuam funcionando.
+
+Custos de cobertura e extra/apoio operacional são separados, por mês de referência. Totais previstos excluem recusados; os valores pagos, pendentes e recusados são apresentados separadamente. A evolução cobre seis meses até o mês escolhido. Não há valores demonstrativos misturados aos dados reais. O acesso usa `/api/executive`, restrito a CEO e administrativo.

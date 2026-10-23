@@ -8,7 +8,7 @@ export async function GET(){try{await admin();const members=await rawDatabase().
 export async function POST(r:Request){
   try{
     sameOrigin(r);await admin();
-    const p=z.object({email:z.string().email().max(254).transform(s=>s.toLowerCase().trim()),name:z.string().trim().min(2).max(160),role:z.enum(['supervisor','admin'])}).strict().safeParse(await r.json());
+    const p=z.object({email:z.string().email().max(254).transform(s=>s.toLowerCase().trim()),name:z.string().trim().min(2).max(160),role:z.enum(['supervisor','admin','ceo'])}).strict().safeParse(await r.json());
     if(!p.success)throw new HttpError(400,'Confira o nome, e-mail e perfil.');
     const b=p.data,db=rawDatabase();
     const token=await transaction(async()=>{

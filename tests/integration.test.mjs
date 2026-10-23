@@ -103,6 +103,19 @@ test('Self-hosted authentication, authorization, persistence and exports',async 
     for(let i=1;i<10;i++)assert.equal((await upload()).status,201);
     assert.equal((await upload()).status,409);
    });
+   await t.test('CEO: perfil executivo somente leitura e sem dados bancários',async()=>{
+    const invited=await request('/api/members',{method:'POST',cookie:adminCookie,body:{name:'Direção QA',email:'ceo@example.invalid',role:'ceo'}});assert.equal(invited.status,201);
+    const activated=await activate(new URL(invited.data.inviteUrl).hash.slice(1));assert.equal(activated.status,200);const ceoCookie=activated.cookie;
+    assert.equal((await request('/api/session',{cookie:ceoCookie})).data.member.role,'ceo');
+    const page=await request('',{cookie:ceoCookie});assert.equal(page.status,200);assert.ok(page.data.text.includes('VISÃO EXECUTIVA'));assert.ok(!page.data.text.includes('Salvar registro'));
+    assert.equal((await request('/api/executive')).status,401);assert.equal((await request('/api/executive',{cookie:superCookie})).status,403);
+    for(const cookie of [ceoCookie,adminCookie]){const dashboard=await request('/api/executive?month=2026-10',{cookie});assert.equal(dashboard.status,200);assert.equal(dashboard.data.stores.length,14);assert.equal(JSON.stringify(dashboard.data).includes('pix'),false);assert.equal(JSON.stringify(dashboard.data).includes('cpf'),false)}
+    assert.equal((await request('/api/executive?month=bad',{cookie:ceoCookie})).status,400);
+    assert.equal((await request('/api/coverages',{cookie:ceoCookie})).status,403);assert.equal((await request('/api/receipts',{cookie:ceoCookie})).status,403);assert.equal((await request('/api/members',{cookie:ceoCookie})).status,403);assert.equal((await request('/api/dashboard-settings',{cookie:ceoCookie})).status,403);
+    assert.equal((await request('/api/coverages',{method:'POST',cookie:ceoCookie,body:payload})).status,403);
+    assert.equal((await request('/api/members',{method:'POST',cookie:ceoCookie,body:{name:'Teste',email:'teste@example.invalid',role:'admin'}})).status,403);
+    assert.equal((await request('/api/coverages/'+recordId+'/finance',{cookie:ceoCookie})).status,404);
+   });
    await t.test('Revocation immediately invalidates sessions; re-invitation preserves record ownership',async()=>{
   assert.equal((await request('/api/members?email=supervisor%40example.invalid',{method:'DELETE',cookie:adminCookie})).status,200);
   assert.equal((await request('/api/coverages',{cookie:superCookie})).status,401);
