@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text, index } from 'drizzle-orm/sqlite-core';
+import { integer, sqliteTable, text, index, blob } from 'drizzle-orm/sqlite-core';
 export const members = sqliteTable('members', {
  email:text('email').primaryKey(), userId:text('user_id').unique(), name:text('name').notNull(), role:text('role').notNull(), primary:integer('primary_admin').notNull().default(0), passwordHash:text('password_hash'), disabled:integer('disabled').notNull().default(0), failedAttempts:integer('failed_attempts').notNull().default(0), lockedUntil:integer('locked_until').notNull().default(0)
 });
@@ -8,5 +8,18 @@ export const authLimits=sqliteTable('auth_limits',{key:text('key').primaryKey(),
 export const dashboardSettings=sqliteTable('dashboard_settings',{id:integer('id').primaryKey(),monthlyLimitCents:integer('monthly_limit_cents').notNull().default(500000),updatedBy:text('updated_by').notNull(),updatedAt:text('updated_at').notNull()});
 export const coverages = sqliteTable('coverages', {
  serviceType:text('service_type').notNull().default('cobertura'),
+ workedDates:text('worked_dates'),doubledDates:text('doubled_dates').notNull().default('[]'),
  id:text('id').primaryKey(), ownerId:text('owner_id').notNull(), ownerName:text('owner_name').notNull(), ownerEmail:text('owner_email').notNull(), createdAt:text('created_at').notNull(), name:text('name').notNull(), cpf:text('cpf').notNull(), operation:text('operation').notNull(), start:text('start').notNull(), end:text('end').notNull(), month:text('month').notNull(), weekdays:text('weekdays').notNull(), justification:text('justification').notNull(), details:text('details').notNull(), pix:text('pix').notNull(), thirdParty:text('third_party').notNull(), dailyCents:integer('daily_cents').notNull(), days:integer('days').notNull(), totalCents:integer('total_cents').notNull()
 },t=>[index('idx_coverages_owner_month').on(t.ownerId,t.month),index('idx_coverages_month').on(t.month)]);
+export const coverageFinance=sqliteTable('coverage_finance',{
+ coverageId:text('coverage_id').primaryKey().references(()=>coverages.id),status:text('status').notNull().default('pending'),
+ rejectionReason:text('rejection_reason').notNull().default(''),paidOn:text('paid_on'),updatedBy:text('updated_by').notNull(),updatedAt:text('updated_at').notNull()
+});
+export const financeEvents=sqliteTable('finance_events',{
+ id:text('id').primaryKey(),coverageId:text('coverage_id').notNull().references(()=>coverages.id),action:text('action').notNull(),actor:text('actor').notNull(),at:text('at').notNull(),note:text('note').notNull().default('')
+},t=>[index('idx_finance_events_coverage').on(t.coverageId)]);
+export const financeAttachments=sqliteTable('finance_attachments',{
+ id:text('id').primaryKey(),coverageId:text('coverage_id').notNull().references(()=>coverages.id),
+ filename:text('filename').notNull(),mime:text('mime').notNull(),size:integer('size').notNull(),
+ content:blob('content',{mode:'buffer'}).notNull(),uploadedBy:text('uploaded_by').notNull(),uploadedAt:text('uploaded_at').notNull()
+},t=>[index('idx_finance_attachments_coverage').on(t.coverageId)]);

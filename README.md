@@ -12,7 +12,31 @@ Sistema para supervisores registrarem coberturas e para o administrativo consult
 - Exportação `.xlsx` no layout original de 19 colunas, separada por supervisor e mês, preservando CPFs como texto.
 - Banco SQLite persistente fora da pasta das releases. Nesta instalação de teste, o backup automático fica desativado.
 
-## Hospedagem
+## Controle financeiro
+
+- Na aba **Financeiro**, o administrativo consulta todos os meses, filtra situação e lançamentos fora do prazo, aceita ou recusa os registros (com motivo obrigatório) e dá baixa como pago após aceitar, informando a data de pagamento integral.
+- Supervisores consultam a **Situação financeira** somente de seus próprios registros, incluindo motivo da recusa e histórico. Apenas administrativos podem decidir ou pagar.
+- Coberturas e apoios com dias de mês anterior **à data do lançamento**, e apoios de semanas já encerradas (segunda a domingo, horário de São Paulo), recebem aviso. Períodos que atravessam meses não são divididos. O aviso permanece associado à data original de criação, não muda retroativamente com o calendário.
+- Decisões registram autor, data e histórico. Pagos são encerrados e não podem ser recusados ou pagos novamente. Os registros antigos começam como pendentes: não se presume que já tenham sido pagos.
+- O financeiro pode anexar comprovantes aos registros; o supervisor responsável pode baixá-los.
+
+### Ativação segura
+
+Faça backup e aplique `npm run db:migrate` antes de iniciar uma nova release. Com `DATABASE_URL` configurada, as migrações de `postgres/` são usadas. Sem essa variável, as migrações SQLite de `drizzle/` são usadas para desenvolvimento/instalações legadas. Publicar apenas a interface no Netlify não ativa aprovação e baixa sem a API atualizada.
+
+### Anexos do financeiro
+
+O financeiro pode anexar comprovantes em PDF, JPG ou PNG (até 5 MB, máximo de 10 por registro), inclusive depois da baixa. Somente administradores enviam arquivos; downloads exigem login e são restritos a administradores e ao supervisor responsável. Anexos são guardados no banco, junto dos metadados e do histórico de envio, e incluídos nos backups PostgreSQL. Não são publicados em uma pasta pública. A assinatura do formato é verificada, mas isso não substitui análise antivírus; baixe apenas comprovantes confiáveis. Configure o limite do proxy desta aplicação com `client_max_body_size 5m`.
+
+### Aplicação completa no servidor com PostgreSQL
+
+Frontend, API e banco podem rodar no mesmo servidor, em `https://bkpmail.dcasgroup.com.br/coberturas/`. O banco dedicado `controle_coberturas_app` deve aceitar apenas conexões locais; não abra a porta 5432 publicamente. A conexão fica em `/etc/controle-coberturas.env` com permissão `0600`, nunca no frontend ou repositório.
+
+`deploy/provision-postgres.py` cria banco e usuário exclusivos sem sobrescrever bancos existentes. `deploy/activate-postgres.py` instala uma release standalone, pausa somente esta aplicação, salva o ambiente antigo e um snapshot SQLite, cria o schema e importa os dados com contagem e checksum por tabela. Preserva hashes de senhas, sessões, convites e identificadores. Em falha de ativação, restaura o serviço anterior; mantém o banco alvo para investigação, sem apagar dados.
+
+O SQLite original permanece disponível para recuperação. Depois que ocorrerem escritas no PostgreSQL, voltar ao SQLite antigo exigiria reconciliar os dados novos; não faça rollback cego. Backups PostgreSQL usam `pg_dump` em formato custom e são verificados com `pg_restore --list`. Backups no mesmo servidor precisam também de cópias externas para proteção contra perda da máquina.
+
+## Hospedagem do servidor atual
 
 Versão preparada para Ubuntu com Node.js 22.13 ou superior, Nginx e systemd. O aplicativo roda apenas em `127.0.0.1:3100`; o Nginx publica o acesso por HTTPS. Não execute `next dev` em produção.
 
@@ -65,3 +89,11 @@ A interface pode ser publicada no Netlify com `npm run build:netlify`, usando a 
 No servidor, configure `APP_ORIGIN` com a origem HTTPS do Netlify, `PUBLIC_APP_BASE_PATH` vazio para gerar convites na raiz da interface, e `ALLOWED_ORIGINS` com as origens exatas adicionais que devem continuar funcionando. Não use curingas. Usuários entram no Netlify com o mesmo e-mail e senha do sistema.
 
 O servidor da API deve permanecer ligado para o login, os registros e o dashboard funcionarem. O Netlify hospeda os arquivos da interface, não o banco SQLite.
+
+### Comprovantes individuais por colaborador
+
+A aba **Comprovantes** lista os anexos do financeiro agrupados pelo CPF do colaborador. Supervisores veem e baixam apenas os arquivos dos registros que cadastraram; o administrativo pode consultar todos. Os arquivos já anexados no financeiro aparecem nessa lista, sem precisar reenviar.
+
+O administrativo pode enviar PDF, JPG ou PNG individual (até 5 MB), identificar pelo nome completo/CPF e confirmar o registro, período e valor antes da publicação. Homônimos, múltiplos registros e comprovantes ilegíveis exigem seleção manual. O nome do arquivo também pode gerar uma sugestão, identificada como tal. O envio do comprovante não dá baixa automática no pagamento.
+
+A identificação funciona no próprio servidor, sem enviar documentos a serviços externos: instale `poppler-utils`, `tesseract-ocr` e `tesseract-ocr-por`. A leitura de PDF considera até cinco páginas de texto e, quando necessário, OCR da primeira página; imagens usam OCR em português. Se a leitura não funcionar, o financeiro pode selecionar o colaborador manualmente. Os arquivos temporários de leitura são removidos ao fim do processamento. Os anexos definitivos permanecem privados no PostgreSQL/SQLite existente e nos mesmos endpoints autenticados do financeiro.

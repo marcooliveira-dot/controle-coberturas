@@ -8,9 +8,10 @@ import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
 import ExcelJS from 'exceljs';
+import pg from 'pg';
 
 test('Self-hosted authentication, authorization, persistence and exports',async t=>{
- const temp=mkdtempSync(join(tmpdir(),'coverage-test-'));const dbPath=join(temp,'db.sqlite');const setupToken=randomBytes(32).toString('hex');const port=process.env.TEST_PORT||'3419';const origin='http://127.0.0.1:'+port;const base=process.env.NEXT_PUBLIC_BASE_PATH||'/coberturas';const env={...process.env,NODE_ENV:'production',HOSTNAME:'127.0.0.1',PORT:port,APP_ORIGIN:origin,ALLOWED_ORIGINS:'https://controle-coberturas.netlify.app',PUBLIC_APP_BASE_PATH:'',DATABASE_PATH:dbPath,SETUP_TOKEN:setupToken,ADMIN_EMAIL:'admin@example.invalid',COOKIE_SECURE:'true',BACKUP_DIR:join(temp,'backups')};
+ const temp=mkdtempSync(join(tmpdir(),'coverage-test-'));const dbPath=join(temp,'db.sqlite');const setupToken=randomBytes(32).toString('hex');const port=process.env.TEST_PORT||'3419';const origin='http://127.0.0.1:'+port;const base=process.env.NEXT_PUBLIC_BASE_PATH||'/coberturas';const env={...process.env,DATABASE_URL:process.env.TEST_DATABASE_URL||'',NODE_ENV:'production',HOSTNAME:'127.0.0.1',PORT:port,APP_ORIGIN:origin,ALLOWED_ORIGINS:'https://controle-coberturas.netlify.app',PUBLIC_APP_BASE_PATH:'',DATABASE_PATH:dbPath,SETUP_TOKEN:setupToken,ADMIN_EMAIL:'admin@example.invalid',COOKIE_SECURE:'true',BACKUP_DIR:join(temp,'backups')};
  execFileSync(process.execPath,['scripts/migrate.mjs'],{env,stdio:'pipe'});
  execFileSync(process.execPath,['scripts/migrate.mjs'],{env,stdio:'pipe'});
  const server=spawn(process.execPath,['.next/standalone/server.js'],{env,stdio:['ignore','pipe','pipe']});let logs='';server.stdout.on('data',d=>logs+=d);server.stderr.on('data',d=>logs+=d);
@@ -44,7 +45,65 @@ test('Self-hosted authentication, authorization, persistence and exports',async 
   const mine=await request('/api/coverages',{cookie:superCookie});assert.equal(mine.data.records.length,1);assert.equal(mine.data.records[0].id,recordId);assert.equal(mine.data.records[0].totalCents,25100);assert.equal(mine.data.records[0].serviceType,'cobertura');assert.equal((await request('/api/coverages',{method:'POST',cookie:superCookie,body:{...payload,serviceType:'invalido'}})).status,400);assert.equal((await request('/api/coverages',{cookie:otherCookie})).data.records[0].serviceType,'apoio_operacional');
   assert.equal((await request('/api/members',{cookie:superCookie})).status,403);assert.equal((await request('/api/members',{cookie:adminCookie})).status,200);assert.equal((await request('/api/coverages',{cookie:adminCookie})).data.records.length,2);
  });
- await t.test('Revocation immediately invalidates sessions; re-invitation preserves record ownership',async()=>{
+  await t.test('Financeiro: autorização, recusa, aprovação, baixa e histórico persistente',async()=>{
+   const path='/api/coverages/'+recordId+'/finance';
+   assert.equal((await request(path)).status,401);
+   assert.equal((await request(path,{cookie:otherCookie})).status,404);
+   const mine=await request(path,{cookie:superCookie});assert.equal(mine.status,200);assert.equal(mine.data.finance.status,'pending');assert.deepEqual(mine.data.events,[]);
+   const patch=(body,cookie=adminCookie,headers={})=>request(path,{method:'PATCH',cookie,body,headers});
+   assert.equal((await patch({status:'approved',expectedStatus:'pending'},superCookie)).status,403);
+   assert.equal((await patch({status:'approved',expectedStatus:'pending'},adminCookie,{Origin:'https://hostile.invalid'})).status,403);
+   assert.equal((await patch({status:'paid',expectedStatus:'pending',paidOn:'2026-01-01'})).status,409);
+   assert.equal((await patch({status:'rejected',expectedStatus:'pending',reason:' '})).status,400);
+   assert.equal((await patch({status:'rejected',expectedStatus:'pending',reason:'Confira os dias trabalhados.'})).status,200);
+   assert.equal((await request(path,{cookie:superCookie})).data.finance.rejectionReason,'Confira os dias trabalhados.');
+   assert.equal((await patch({status:'approved',expectedStatus:'pending'})).status,409);
+   assert.equal((await patch({status:'approved',expectedStatus:'rejected'})).status,200);
+   assert.equal((await patch({status:'paid',expectedStatus:'approved',paidOn:'2026-02-30'})).status,400);
+   assert.equal((await patch({status:'paid',expectedStatus:'approved',paidOn:'2099-01-01'})).status,400);
+   assert.equal((await patch({status:'paid',expectedStatus:'approved',paidOn:'2026-01-01'})).status,200);
+   assert.equal((await patch({status:'rejected',expectedStatus:'paid',reason:'Alterar pago'})).status,409);
+   const paid=await request(path,{cookie:superCookie});assert.equal(paid.data.finance.status,'paid');assert.equal(paid.data.finance.paidOn,'2026-01-01');assert.equal(paid.data.finance.updatedBy,'admin@example.invalid');assert.equal(paid.data.finance.rejectionReason,'');assert.equal(paid.data.events.length,3);assert.ok(paid.data.events.some(e=>e.action==='rejected'&&e.note==='Confira os dias trabalhados.'));
+   const list=await request('/api/coverages',{cookie:superCookie});assert.equal(list.data.financialControl,true);assert.equal(list.data.records[0].finance.status,'paid');
+   assert.equal((await request('/api/coverages/'+crypto.randomUUID()+'/finance',{cookie:adminCookie})).status,404);
+  });
+   await t.test('Anexos: acesso restrito, validação, download e auditoria após baixa',async()=>{
+    const path='/api/coverages/'+recordId+'/finance/attachments';
+    const bytes=Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF');
+    const upload=(cookie=adminCookie,body=bytes,filename='Comprovante de pagamento.pdf',originHeader=origin)=>fetch(origin+base+path,{method:'POST',headers:{Cookie:cookie,Origin:originHeader,'X-Filename':encodeURIComponent(filename),'Content-Type':'application/pdf'},body});
+    assert.equal((await request(path)).status,401);
+    assert.equal((await request(path,{cookie:otherCookie})).status,404);
+    assert.equal((await upload(superCookie)).status,403);
+    assert.equal((await upload(adminCookie,bytes,'teste.pdf','https://hostile.invalid')).status,403);
+    assert.equal((await upload(adminCookie,Buffer.from('<script>bad</script>'))).status,400);
+    assert.equal((await upload(adminCookie,bytes,'teste.html')).status,400);
+    assert.equal((await upload(adminCookie,Buffer.alloc(0))).status,400);
+    assert.equal((await upload(adminCookie,Buffer.alloc(5*1024*1024+1))).status,413);
+    const response=await upload();assert.equal(response.status,201);const saved=(await response.json()).attachment;
+    assert.equal(saved.filename,'Comprovante de pagamento.pdf');assert.equal(saved.size,bytes.length);
+    assert.equal((await request('/api/receipts')).status,401);
+    const receipts=await request('/api/receipts',{cookie:superCookie});assert.equal(receipts.status,200);assert.equal(receipts.data.receipts.length,1);assert.equal(receipts.data.receipts[0].coverageId,recordId);assert.equal(receipts.data.receipts[0].name,payload.name);assert.equal(receipts.data.receipts[0].content,undefined);
+    assert.equal((await request('/api/receipts',{cookie:otherCookie})).data.receipts.length,0);
+    assert.equal((await request('/api/receipts',{cookie:adminCookie})).data.receipts.length,1);
+    const identify=(cookie,body=bytes,source=origin,filename='teste.pdf')=>fetch(origin+base+'/api/receipts/identify',{method:'POST',headers:{Cookie:cookie,Origin:source,'X-Filename':encodeURIComponent(filename),'Content-Type':'application/pdf'},body});
+    assert.equal((await identify(superCookie)).status,403);
+    assert.equal((await identify(adminCookie,bytes,'https://hostile.invalid')).status,403);
+    assert.equal((await identify(adminCookie,Buffer.from('<html>invalido</html>'))).status,400);
+    assert.equal((await identify(adminCookie,Buffer.alloc(5*1024*1024+1))).status,413);
+    const identified=await identify(adminCookie,bytes,origin,'Prestador_QA.pdf');assert.equal(identified.status,200);const identifiedData=await identified.json();assert.ok(identifiedData.candidates.some(c=>c.id===recordId&&c.reason==='filename'));
+
+
+    const list=await request(path,{cookie:superCookie});assert.equal(list.data.attachments.length,1);assert.equal(list.data.attachments[0].id,saved.id);assert.equal(list.data.attachments[0].content,undefined);
+    const download=async(cookie='',id=recordId)=>fetch(origin+base+'/api/coverages/'+id+'/finance/attachments/'+saved.id,{headers:cookie?{Cookie:cookie}:{}});
+    assert.equal((await download()).status,401);assert.equal((await download(otherCookie)).status,404);
+    assert.equal((await download(adminCookie,crypto.randomUUID())).status,404);
+    for(const cookie of [adminCookie,superCookie]){const r=await download(cookie);assert.equal(r.status,200);assert.match(r.headers.get('content-disposition'),/^attachment;/);assert.match(r.headers.get('cache-control'),/no-store/);assert.equal(r.headers.get('x-content-type-options'),'nosniff');assert.deepEqual(Buffer.from(await r.arrayBuffer()),bytes)}
+    const detail=await request('/api/coverages/'+recordId+'/finance',{cookie:adminCookie});assert.equal(detail.data.finance.status,'paid');assert.ok(detail.data.events.some(e=>e.action==='attachment_uploaded'&&e.note===saved.filename));
+    // The per-record cap is checked inside the serialized transaction.
+    for(let i=1;i<10;i++)assert.equal((await upload()).status,201);
+    assert.equal((await upload()).status,409);
+   });
+   await t.test('Revocation immediately invalidates sessions; re-invitation preserves record ownership',async()=>{
   assert.equal((await request('/api/members?email=supervisor%40example.invalid',{method:'DELETE',cookie:adminCookie})).status,200);
   assert.equal((await request('/api/coverages',{cookie:superCookie})).status,401);
   const renewed=await activate(await invite('Supervisor QA','supervisor@example.invalid'));assert.equal(renewed.status,200);superCookie=renewed.cookie;
@@ -55,11 +114,13 @@ test('Self-hosted authentication, authorization, persistence and exports',async 
   const credentials={email:'supervisor@example.invalid',password:'Supervisor teste 123!'};let login=await request('/api/auth/login',{method:'POST',body:credentials});assert.equal(login.status,200);superCookie=login.cookie;
   for(let i=0;i<5;i++)assert.equal((await request('/api/auth/login',{method:'POST',body:{...credentials,password:'bad'}})).status,401);
   assert.equal((await request('/api/auth/login',{method:'POST',body:credentials})).status,401);
-  const db=new DatabaseSync(dbPath);db.prepare('UPDATE members SET locked_until=0 WHERE email=?').run(credentials.email);db.close();login=await request('/api/auth/login',{method:'POST',body:credentials});assert.equal(login.status,200);superCookie=login.cookie;
+   if(env.DATABASE_URL){const db=new pg.Client({connectionString:env.DATABASE_URL});await db.connect();try{await db.query('UPDATE members SET locked_until=0 WHERE email=$1',[credentials.email])}finally{await db.end()}}
+   else{const db=new DatabaseSync(dbPath);db.prepare('UPDATE members SET locked_until=0 WHERE email=?').run(credentials.email);db.close()}
+   login=await request('/api/auth/login',{method:'POST',body:credentials});assert.equal(login.status,200);superCookie=login.cookie;
   assert.equal((await request('/api/auth/logout',{method:'POST',cookie:superCookie,body:{}})).status,200);assert.equal((await request('/api/session',{cookie:superCookie})).status,401);
  });
  await t.test('Consistent backup and original-layout Excel export',async()=>{
-  execFileSync(process.execPath,['scripts/backup.mjs'],{env,stdio:'pipe'});const date=new Date().toISOString().slice(0,10);const backupDb=new DatabaseSync(join(env.BACKUP_DIR,'coberturas-'+date+'.sqlite'));assert.equal(backupDb.prepare('SELECT count(*) AS n FROM coverages').get().n,2);backupDb.close();
+   if(!env.DATABASE_URL){execFileSync(process.execPath,['scripts/backup.mjs'],{env,stdio:'pipe'});const date=new Date().toISOString().slice(0,10);const backupDb=new DatabaseSync(join(env.BACKUP_DIR,'coberturas-'+date+'.sqlite'));assert.equal(backupDb.prepare('SELECT count(*) AS n FROM coverages').get().n,2);assert.equal(backupDb.prepare('SELECT count(*) AS n FROM finance_attachments').get().n,10);assert.match(Buffer.from(backupDb.prepare('SELECT content FROM finance_attachments LIMIT 1').get().content).toString(),/^%PDF-/);backupDb.close()}
   const compiled=mkdtempSync(resolve('tests/.qa-'));try{for(const name of ['coverage','paths','export']){let js=ts.transpileModule(readFileSync('lib/'+name+'.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;js=js.replaceAll("'./coverage'","'./coverage.js'").replaceAll("'./paths'","'./paths.js'");writeFileSync(join(compiled,name+'.js'),js)}const {buildExcel}=await import('file://'+join(compiled,'export.js'));const {datesByWeekday}=await import('file://'+join(compiled,'coverage.js'));assert.deepEqual(datesByWeekday('2026-10-01','2026-10-14')[0],['2026-10-05','2026-10-12']);assert.deepEqual(datesByWeekday('2024-02-28','2024-03-03')[3],['2024-02-29']);assert.deepEqual(datesByWeekday('2026-12-31','2027-01-04')[0],['2027-01-04']);const rows=(await request('/api/coverages',{cookie:adminCookie})).data.records;const template=readFileSync('public/modelo.xlsx');const exportRows=[...rows,{...rows.find(r=>r.serviceType==='cobertura'),serviceType:'apoio_operacional'}];const out=await buildExcel(exportRows,template.buffer.slice(template.byteOffset,template.byteOffset+template.byteLength));const wb=new ExcelJS.Workbook();await wb.xlsx.load(out);assert.equal(wb.worksheets.length,3);assert.ok(wb.worksheets.some(s=>String(s.getCell('A1').value).includes('APOIO OPERACIONAL')));assert.ok(wb.worksheets.some(s=>String(s.getCell('A1').value).includes('COBERTURA')));for(const s of wb.worksheets){assert.equal(s.getCell('C3').value,cpf);assert.equal(s.getCell('O3').value,'=PIX literal');assert.equal(s.getCell('S3').result,251);assert.equal(s.getCell('A1').isMerged,true);assert.equal(s.getCell('S2').value,'VALOR TOTAL');assert.equal(s.getCell('E3').value,'05/10');assert.equal(s.getCell('G3').value,'07/10');}}finally{rmSync(compiled,{recursive:true,force:true})}
  });
  }finally{server.kill('SIGTERM');await new Promise(r=>server.once('exit',r));rmSync(temp,{recursive:true,force:true})}
